@@ -71,6 +71,41 @@ app.add_middleware(
 )
 
 
+# Set here rather than in frontend/vercel.json, because the single-origin
+# deployment serves the web app from this process - the Vercel config only
+# applies on the split deployment.
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    # Leaflet injects inline styles for map panes, and OpenStreetMap serves the
+    # tiles, so those two are allowed explicitly and nothing else is.
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "img-src 'self' data: https://*.tile.openstreetmap.org; "
+        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self'; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    ),
+}
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for header, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
+    # Only meaningful over TLS, which is exactly when cookies are Secure.
+    if settings.cookie_secure:
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
+
+
 @app.middleware("http")
 async def request_logging(request: Request, call_next):
     """One structured line per request, correlatable end to end.
@@ -179,15 +214,23 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 
 
 @app.get("/api/health", tags=["meta"])
-def health() -> dict[str, str]:
-    """Liveness probe that also proves the database connection works."""
+def health() -> JSONResponse:
+    """Readiness probe: proves this instance can actually serve requests.
+
+    Returns 503 when the database is unreachable. The platform health check
+    only inspects the status code, so answering 200 while degraded would keep
+    a broken instance in the load balancer indefinitely.
+    """
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
     except Exception:
-        logger.exception("Health check could not reach the database")
-        return {"status": "degraded", "database": "unreachable"}
-    return {"status": "ok", "database": "ok"}
+        logger.exception("health check could not reach the database")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "degraded", "database": "unreachable"},
+        )
+    return JSONResponse(content={"status": "ok", "database": "ok"})
 
 
 app.include_router(auth.router)

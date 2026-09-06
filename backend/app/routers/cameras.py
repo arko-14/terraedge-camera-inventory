@@ -118,7 +118,21 @@ async def import_cameras(admin: AdminUser, db: DbSession, file: UploadFile = Fil
     Valid rows are imported even when others fail, so one bad row in a long
     spreadsheet does not reject the whole file.
     """
-    raw = await file.read()
+    if file.size is not None and file.size > csv_service.MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"That file is larger than the {csv_service.MAX_UPLOAD_BYTES // 1024} KB limit.",
+        )
+
+    # Read one byte past the cap: enough to detect an oversized upload whose
+    # declared size was missing or wrong, without buffering the whole thing.
+    raw = await file.read(csv_service.MAX_UPLOAD_BYTES + 1)
+    if len(raw) > csv_service.MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"That file is larger than the {csv_service.MAX_UPLOAD_BYTES // 1024} KB limit.",
+        )
+
     try:
         content = raw.decode("utf-8-sig")
     except UnicodeDecodeError as exc:

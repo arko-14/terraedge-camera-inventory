@@ -52,6 +52,9 @@ IMPORT_COLUMNS = [
 ]
 
 MAX_IMPORT_ROWS = 1000
+# 1000 rows of this shape is well under 200 KB; the cap exists so a large
+# upload is refused before it is read into memory, not after.
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024
 
 
 def export_cameras(cameras: list[Camera]) -> str:

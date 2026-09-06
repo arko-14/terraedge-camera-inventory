@@ -293,6 +293,10 @@ def update_camera(db: Session, actor: User, camera: Camera, payload: CameraUpdat
     newly_deployed = camera.status == CameraStatus.DEPLOYED and not was_deployed
     if newly_deployed:
         camera.deployed_at = datetime.now(UTC)
+    elif was_deployed and camera.status != CameraStatus.DEPLOYED:
+        # Leaving the field clears the date, as a transfer already does.
+        # Otherwise an allocated camera keeps claiming a deployment date.
+        camera.deployed_at = None
 
     after = snapshot(camera)
     if has_changed(before, after) or "model" in changes or "notes" in changes:
@@ -392,12 +396,18 @@ def build_camera_query(
     stmt = select(Camera)
 
     if search:
-        term = f"%{search.strip().lower()}%"
+        # Escape LIKE metacharacters, or a search for "%" matches every row and
+        # forces a full scan. The backslash is escaped first, or it would
+        # re-escape the escapes added below.
+        needle = search.strip().lower()
+        for char in ("\\", "%", "_"):
+            needle = needle.replace(char, f"\\{char}")
+        term = f"%{needle}%"
         stmt = stmt.where(
             or_(
-                func.lower(Camera.serial_number).like(term),
-                func.lower(func.coalesce(Camera.site_name, "")).like(term),
-                func.lower(func.coalesce(Camera.contact_name, "")).like(term),
+                func.lower(Camera.serial_number).like(term, escape="\\"),
+                func.lower(func.coalesce(Camera.site_name, "")).like(term, escape="\\"),
+                func.lower(func.coalesce(Camera.contact_name, "")).like(term, escape="\\"),
             )
         )
     if range_id is not None:
