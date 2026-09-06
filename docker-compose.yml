@@ -1,0 +1,23 @@
+# Local Postgres for development and for verifying migrations against the same
+# engine used in production. The application itself runs on the host
+# (uvicorn / vite), so this file only provides the database.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: terraedge-db
+    environment:
+      POSTGRES_USER: terraedge
+      POSTGRES_PASSWORD: terraedge
+      POSTGRES_DB: terraedge
+    ports:
+      - "5432:5432"
+    volumes:
+      - terraedge_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U terraedge -d terraedge"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  terraedge_pgdata:

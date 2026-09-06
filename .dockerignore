@@ -1,0 +1,25 @@
+# Keep the build context small and never ship local secrets or virtualenvs.
+**/.env
+**/.env.*
+!**/.env.example
+
+**/node_modules
+**/dist
+**/.venv
+**/venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/*.db
+**/*.sqlite3
+**/*.tsbuildinfo
+
+.git
+.gitignore
+docs/
+scripts/
+*.md
+docker-compose.yml
+**/.DS_Store

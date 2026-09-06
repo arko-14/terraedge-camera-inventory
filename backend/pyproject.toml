@@ -1,0 +1,25 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = [
+    # Third-party deprecations we do not control; our own code is clean.
+    "ignore::DeprecationWarning:starlette.*",
+    "ignore::DeprecationWarning:anyio.*",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
+ignore = [
+    "E501",   # long lines are handled by the formatter, not enforced here
+    "B008",   # FastAPI dependencies are function calls in argument defaults
+    "UP042",  # str+Enum, not StrEnum: SQLAlchemy's Enum type reads .value from it
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Pytest fixtures are requested by name and may be present only for their
+# side effects (seeding the database), so "unused argument" is expected.
+"tests/*" = ["ARG001"]

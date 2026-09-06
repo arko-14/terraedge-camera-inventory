@@ -1,0 +1,44 @@
+@import 'tailwindcss';
+
+/* A small, deliberate palette: neutral greys for structure, forest green for
+   the reserve's own identity, and one colour per camera status so the status
+   is readable at a glance in a list of hundreds. */
+@theme {
+  --color-forest-50: #f0f7f2;
+  --color-forest-100: #dbeee1;
+  --color-forest-200: #b9ddc6;
+  --color-forest-600: #2f6b45;
+  --color-forest-700: #245537;
+  --color-forest-800: #1d4530;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #f6f7f6;
+  color: #1c1c1c;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Respect users who ask for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

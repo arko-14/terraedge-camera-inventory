@@ -1,0 +1,39 @@
+# --- secrets -------------------------------------------------------------
+# Only the .example files are ever committed.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- python --------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# --- local databases -----------------------------------------------------
+*.db
+*.sqlite3
+
+# --- node / frontend -----------------------------------------------------
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# --- personal notes, not part of the submission --------------------------
+INTERVIEW_PREP.md
+
+# The assignment brief itself is TerraEdge's document, not mine to redistribute.
+docs/TerraEdge_Assignment_Sandipan_Paul.pdf
+
+# --- editors / os --------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
+*.swp

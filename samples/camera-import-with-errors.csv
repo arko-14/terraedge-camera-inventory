@@ -1,0 +1,10 @@
+serial_number,model,range,beat,site_name,latitude,longitude,contact_name,contact_phone,notes
+TE-CAM-201,PantheraCam S3,Chahala Range,Bakua Beat,Bakua North Track,21.9150,86.3700,Ranjan Mahanta,+91 98110 20034,Valid row - imports
+TE-CAM-202,PantheraCam S3,Chahala Range,Joranda Beat,,,,,,Beat belongs to Nawana Range
+TE-CAM-203,TrailWatch X1,Nowhere Range,,,,,,,No such range
+,PantheraCam S3,Chahala Range,Bakua Beat,,,,,,Serial number is missing
+TE-CAM-204,TrailWatch X1,Chahala Range,Bakua Beat,Bad Coordinates Site,not-a-number,86.3700,Ranjan Mahanta,+91 98110 20034,Latitude is not a number
+TE-CAM-001,PantheraCam S3,Chahala Range,Bakua Beat,,,,,,Already in the seeded inventory
+TE-CAM-205,PantheraCam S3,Nawana Range,Joranda Beat,Joranda East Face,21.8110,86.3040,Malati Soren,+91 98110 20037,Valid row - imports
+TE CAM!!206,TrailWatch X1,Chahala Range,,,,,,,Serial number has illegal characters
+TE-CAM-207,TrailWatch X1,Nawana Range,Barehipani Beat,Out Of Bounds Site,120.0,86.2800,Debasis Naik,+91 98110 20036,Latitude is beyond 90 degrees
