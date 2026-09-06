@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import time
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response, status
 from fastapi.exceptions import RequestValidationError
@@ -24,11 +26,26 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 CSRF_EXEMPT_PATHS = {"/api/auth/login"}
 
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-7s %(name)s %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings.check_production_settings()
-    logger.info("Starting TerraEdge API in %s mode", settings.environment)
+    logger.info(
+        "startup environment=%s serves_frontend=%s cookie_samesite=%s cookie_secure=%s cors=%s",
+        settings.environment,
+        settings.serves_frontend,
+        settings.cookie_samesite,
+        settings.cookie_secure,
+        ",".join(settings.cors_origin_list) or "-",
+    )
     yield
+    logger.info("shutdown")
 
 
 app = FastAPI(
@@ -49,8 +66,59 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
+    expose_headers=["X-Request-ID"],
     max_age=600,
 )
+
+
+@app.middleware("http")
+async def request_logging(request: Request, call_next):
+    """One structured line per request, correlatable end to end.
+
+    Registered last, so it wraps every other middleware and sees the real
+    status - including CSRF rejections and unhandled exceptions. The request id
+    goes back in a header and into error bodies, so a user reporting a failure
+    can quote something findable in the logs.
+    """
+    request_id = request.headers.get("X-Request-ID") or uuid4().hex[:12]
+    request.state.request_id = request_id
+    # Render terminates TLS, so the real client is the first forwarded hop.
+    client = (request.headers.get("X-Forwarded-For", "") or "").split(",")[0].strip()
+    started = time.perf_counter()
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception(
+            'request_id=%s method=%s path=%s status=500 duration_ms=%.1f client=%s error=unhandled',
+            request_id,
+            request.method,
+            request.url.path,
+            (time.perf_counter() - started) * 1000,
+            client or "-",
+        )
+        raise
+
+    duration_ms = (time.perf_counter() - started) * 1000
+    response.headers["X-Request-ID"] = request_id
+
+    # Health checks fire every few seconds on a platform probe; log them only
+    # when they fail, so they cannot bury real traffic.
+    if request.url.path == "/api/health" and response.status_code == 200:
+        return response
+
+    logger.log(
+        logging.WARNING if response.status_code >= 400 else logging.INFO,
+        'request_id=%s method=%s path=%s status=%s duration_ms=%.1f user=%s client=%s',
+        request_id,
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+        getattr(request.state, "user_id", None) or "-",
+        client or "-",
+    )
+    return response
 
 
 @app.middleware("http")
@@ -102,7 +170,11 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        content={"detail": headline, "errors": errors},
+        content={
+            "detail": headline,
+            "errors": errors,
+            "request_id": getattr(request.state, "request_id", None),
+        },
     )
 
 

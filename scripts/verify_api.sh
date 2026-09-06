@@ -25,6 +25,11 @@
 set -uo pipefail
 
 API="${API:-http://127.0.0.1:8000}"
+
+# A free-tier instance sleeps and cold-starts, so a single bare curl can fail
+# outright and cascade into every later check. Retry transient failures and
+# allow a generous first-byte window.
+CURL=(curl -s --connect-timeout 15 --max-time 90 --retry 3 --retry-delay 2 --retry-all-errors)
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@similipal.test}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-demo-admin-123}"
 RANGE_EMAIL="${RANGE_EMAIL:-chahala@similipal.test}"
@@ -57,9 +62,9 @@ check() {
 status() {
   local method="$1" path="$2" token="$3" payload="${4:-}"
   if [[ -n "$payload" ]]; then
-    curl -s -o /dev/null -w '%{http_code}' -X "$method" "$API$path" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d "$payload"
+    "${CURL[@]}" -o /dev/null -w '%{http_code}' -X "$method" "$API$path" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d "$payload"
   else
-    curl -s -o /dev/null -w '%{http_code}' -X "$method" "$API$path" -H "Authorization: Bearer $token"
+    "${CURL[@]}" -o /dev/null -w '%{http_code}' -X "$method" "$API$path" -H "Authorization: Bearer $token"
   fi
 }
 
@@ -67,14 +72,14 @@ status() {
 body() {
   local method="$1" path="$2" token="$3" payload="${4:-}"
   if [[ -n "$payload" ]]; then
-    curl -s -X "$method" "$API$path" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d "$payload"
+    "${CURL[@]}" -X "$method" "$API$path" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d "$payload"
   else
-    curl -s -X "$method" "$API$path" -H "Authorization: Bearer $token"
+    "${CURL[@]}" -X "$method" "$API$path" -H "Authorization: Bearer $token"
   fi
 }
 
 login() {
-  curl -s -X POST "$API/api/auth/login" -H 'Content-Type: application/json' -d "{\"email\":\"$1\",\"password\":\"$2\"}" | jq -r '.access_token // empty'
+  "${CURL[@]}" -X POST "$API/api/auth/login" -H 'Content-Type: application/json' -d "{\"email\":\"$1\",\"password\":\"$2\"}" | jq -r '.access_token // empty'
 }
 
 # Distinct prefixes: a substring search for one must not match the others.
@@ -88,11 +93,14 @@ echo
 
 # ---------------------------------------------------------------------------
 bold "1. Authentication"
-check "unauthenticated read is rejected" 401 "$(curl -s -o /dev/null -w '%{http_code}' "$API/api/cameras")"
-check "forged token is rejected" 401 "$(curl -s -o /dev/null -w '%{http_code}' "$API/api/cameras" -H 'Authorization: Bearer not-a-real-token')"
+# Wake a sleeping instance before timing anything.
+"${CURL[@]}" -o /dev/null "$API/api/health" || true
+
+check "unauthenticated read is rejected" 401 "$("${CURL[@]}" -o /dev/null -w '%{http_code}' "$API/api/cameras")"
+check "forged token is rejected" 401 "$("${CURL[@]}" -o /dev/null -w '%{http_code}' "$API/api/cameras" -H 'Authorization: Bearer not-a-real-token')"
 
 WRONG_LOGIN='{"email":"'"$ADMIN_EMAIL"'","password":"wrong-password"}'
-check "wrong password is rejected" 401 "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API/api/auth/login" -H 'Content-Type: application/json' -d "$WRONG_LOGIN")"
+check "wrong password is rejected" 401 "$("${CURL[@]}" -o /dev/null -w '%{http_code}' -X POST "$API/api/auth/login" -H 'Content-Type: application/json' -d "$WRONG_LOGIN")"
 
 ADMIN_TOKEN=$(login "$ADMIN_EMAIL" "$ADMIN_PASSWORD")
 RANGE_TOKEN=$(login "$RANGE_EMAIL" "$RANGE_PASSWORD")
@@ -205,38 +213,38 @@ echo
 bold "8. CSRF protection on cookie sessions"
 COOKIE_JAR=$(mktemp)
 LOGIN_BODY='{"email":"'"$ADMIN_EMAIL"'","password":"'"$ADMIN_PASSWORD"'"}'
-curl -s -c "$COOKIE_JAR" -X POST "$API/api/auth/login" -H 'Content-Type: application/json' -d "$LOGIN_BODY" > /dev/null
+"${CURL[@]}" -c "$COOKIE_JAR" -X POST "$API/api/auth/login" -H 'Content-Type: application/json' -d "$LOGIN_BODY" > /dev/null
 
 ATTACK='{"serial_number":"TE-CSRF-ATTACK"}'
-check "cookie write without a CSRF header is rejected" 403 "$(curl -s -o /dev/null -w '%{http_code}' -b "$COOKIE_JAR" -X POST "$API/api/cameras" -H 'Content-Type: application/json' -d "$ATTACK")"
-check "cookie write with a wrong CSRF header is rejected" 403 "$(curl -s -o /dev/null -w '%{http_code}' -b "$COOKIE_JAR" -X POST "$API/api/cameras" -H 'Content-Type: application/json' -H 'X-CSRF-Token: wrong-value' -d "$ATTACK")"
+check "cookie write without a CSRF header is rejected" 403 "$("${CURL[@]}" -o /dev/null -w '%{http_code}' -b "$COOKIE_JAR" -X POST "$API/api/cameras" -H 'Content-Type: application/json' -d "$ATTACK")"
+check "cookie write with a wrong CSRF header is rejected" 403 "$("${CURL[@]}" -o /dev/null -w '%{http_code}' -b "$COOKIE_JAR" -X POST "$API/api/cameras" -H 'Content-Type: application/json' -H 'X-CSRF-Token: wrong-value' -d "$ATTACK")"
 
 CSRF=$(grep terraedge_csrf "$COOKIE_JAR" | awk '{print $7}')
 GOOD="{\"serial_number\":\"$SERIAL_CSRF\"}"
-check "cookie write with a matching CSRF header succeeds" 201 "$(curl -s -o /dev/null -w '%{http_code}' -b "$COOKIE_JAR" -X POST "$API/api/cameras" -H 'Content-Type: application/json' -H "X-CSRF-Token: $CSRF" -d "$GOOD")"
+check "cookie write with a matching CSRF header succeeds" 201 "$("${CURL[@]}" -o /dev/null -w '%{http_code}' -b "$COOKIE_JAR" -X POST "$API/api/cameras" -H 'Content-Type: application/json' -H "X-CSRF-Token: $CSRF" -d "$GOOD")"
 rm -f "$COOKIE_JAR"
 echo
 
 # ---------------------------------------------------------------------------
 bold "9. CSV export and import"
-EXPORT=$(curl -s "$API/api/cameras/export" -H "Authorization: Bearer $ADMIN_TOKEN")
+EXPORT=$("${CURL[@]}" "$API/api/cameras/export" -H "Authorization: Bearer $ADMIN_TOKEN")
 check "export returns a CSV header row" "serial_number" "$(echo "$EXPORT" | head -1 | cut -d, -f1)"
 check "export includes the verification camera" 1 "$(echo "$EXPORT" | grep -c "^$SERIAL,")"
 
-RANGE_EXPORT=$(curl -s "$API/api/cameras/export" -H "Authorization: Bearer $RANGE_TOKEN")
+RANGE_EXPORT=$("${CURL[@]}" "$API/api/cameras/export" -H "Authorization: Bearer $RANGE_TOKEN")
 check "a range user's export excludes other ranges" 0 "$(echo "$RANGE_EXPORT" | grep -c ',Nawana Range,')"
 
 IMPORT_CSV=$(printf 'serial_number,model,range,beat\nZZ-IMPORT-%s,PantheraCam S3,Chahala Range,Bakua Beat\nZZ-IMPBAD-%s,X,Chahala Range,Joranda Beat\n' "$STAMP" "$STAMP")
-IMPORT_RESULT=$(curl -s -X POST "$API/api/cameras/import" -H "Authorization: Bearer $ADMIN_TOKEN" -F "file=@-;filename=cameras.csv;type=text/csv" <<< "$IMPORT_CSV")
+IMPORT_RESULT=$("${CURL[@]}" -X POST "$API/api/cameras/import" -H "Authorization: Bearer $ADMIN_TOKEN" -F "file=@-;filename=cameras.csv;type=text/csv" <<< "$IMPORT_CSV")
 check "import registers the valid row" 1 "$(echo "$IMPORT_RESULT" | jq -r '.created_count')"
 check "import reports the mismatched-beat row" 1 "$(echo "$IMPORT_RESULT" | jq -r '.error_count')"
 check "the import error names the offending beat" "true" "$(echo "$IMPORT_RESULT" | jq -r '.errors[0].message | contains("Joranda Beat")')"
 
-REIMPORT=$(curl -s -X POST "$API/api/cameras/import" -H "Authorization: Bearer $ADMIN_TOKEN" -F "file=@-;filename=cameras.csv;type=text/csv" <<< "$IMPORT_CSV")
+REIMPORT=$("${CURL[@]}" -X POST "$API/api/cameras/import" -H "Authorization: Bearer $ADMIN_TOKEN" -F "file=@-;filename=cameras.csv;type=text/csv" <<< "$IMPORT_CSV")
 check "re-importing skips rather than duplicates" 1 "$(echo "$REIMPORT" | jq -r '.skipped_count')"
 check "re-importing creates nothing" 0 "$(echo "$REIMPORT" | jq -r '.created_count')"
 
-check "range user cannot import" 403 "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API/api/cameras/import" -H "Authorization: Bearer $RANGE_TOKEN" -F "file=@-;filename=x.csv;type=text/csv" <<< 'serial_number
+check "range user cannot import" 403 "$("${CURL[@]}" -o /dev/null -w '%{http_code}' -X POST "$API/api/cameras/import" -H "Authorization: Bearer $RANGE_TOKEN" -F "file=@-;filename=x.csv;type=text/csv" <<< 'serial_number
 TE-NOPE-1')"
 echo
 
@@ -249,7 +257,12 @@ else
 fi
 echo
 
-if [[ "${CLEAN:-0}" == "1" ]]; then
+if [[ "${CLEAN:-0}" == "1" && "$API" != *"127.0.0.1"* && "$API" != *"localhost"* ]]; then
+  # The seed script reads its own .env, which points at the local database -
+  # running it here would wipe the wrong one and leave the remote untouched.
+  echo "  CLEAN=1 ignored: it reseeds the LOCAL database, and this run targeted"
+  echo "  $API. Reseed that deployment explicitly with its own DATABASE_URL."
+elif [[ "${CLEAN:-0}" == "1" ]]; then
   echo "  Cleaning up: restoring the seeded database..."
   (cd "$(dirname "$0")/../backend" && ./.venv/bin/python -m app.seed --reset > /dev/null)
   echo "  Done - the inventory is back to its seeded 24 cameras."

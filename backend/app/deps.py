@@ -56,6 +56,8 @@ def get_current_user(request: Request, db: Annotated[Session, Depends(get_db)]) 
     if user is None or not user.is_active:
         raise NOT_AUTHENTICATED
 
+    # Read back by the request-logging middleware.
+    request.state.user_id = user.id
     return user
 
 
