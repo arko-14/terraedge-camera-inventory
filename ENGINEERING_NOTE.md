@@ -191,8 +191,9 @@ icons, so there are no image assets to break under a bundler.
 
 ## Time spent
 
-Roughly 12 hours: data modelling 2 h, backend 4 h, frontend 3.5 h, tests and
-verification script 1.5 h, docs and deployment 1 h.
+Roughly 20 hours: data modelling and schema 3 h, backend 6 h, frontend 5 h,
+tests and the verification script 2.5 h, the optional extensions 2 h, docs and
+deployment 1.5 h.
 
 ## Use of AI tools
 
