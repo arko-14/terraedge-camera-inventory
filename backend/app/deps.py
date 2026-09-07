@@ -56,9 +56,31 @@ def get_current_user(request: Request, db: Annotated[Session, Depends(get_db)]) 
     if user is None or not user.is_active:
         raise NOT_AUTHENTICATED
 
+    # Issued before the account last logged out, so it is no longer valid.
+    if payload.get("tv") != user.token_version:
+        raise NOT_AUTHENTICATED
+
     # Read back by the request-logging middleware.
     request.state.user_id = user.id
     return user
+
+
+def get_optional_user(request: Request, db: Session) -> User | None:
+    """The signed-in user, or None - never raises.
+
+    Logout needs to know who is leaving so it can revoke their tokens, but must
+    still clear cookies for an expired or malformed session rather than 401.
+    """
+    token = extract_token(request)
+    if not token:
+        return None
+    payload = decode_access_token(token)
+    if not payload:
+        return None
+    try:
+        return db.get(User, int(payload.get("sub", "")))
+    except (TypeError, ValueError):
+        return None
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]

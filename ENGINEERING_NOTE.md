@@ -93,7 +93,10 @@ curl, no browser involved.
   transparent re-hash on login.
 - **Sessions** — Signed JWT, 12 h, **httpOnly** cookie so XSS can't read it. The
   token's role/range claims are **never trusted**; the user row is re-read every
-  request, so revoking an account takes effect immediately.
+  request, so revoking an account takes effect immediately. Logout increments a
+  `token_version` on the account and every request compares it, so signing out
+  invalidates tokens already issued — not just the cookie. That costs nothing
+  extra, because the user row was already being loaded.
 - **CSRF** — Double-submit token, as **middleware not a decorator**, so routes
   added later are protected by default.
 - **Secrets** — All environment variables; only `.env.example` is committed. In
@@ -147,7 +150,8 @@ and a real history entry.
 ## Known limitations
 
 - No password reset, invite flow or admin user screen; accounts are seeded.
-- No refresh tokens; a 12 h session simply expires.
+- No refresh tokens; a 12 h session simply expires. Logout is account-wide
+  rather than per-device — per-device sessions would need a session table.
 - No rate limiting on login.
 - Coordinates validated for range, not plausibility — nothing checks a point
   falls inside Similipal or the named beat.

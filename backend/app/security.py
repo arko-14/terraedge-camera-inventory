@@ -38,7 +38,9 @@ def verify_password(plain_password: str, password_hash: str) -> tuple[bool, bool
     return True, hasher.check_needs_rehash(password_hash)
 
 
-def create_access_token(user_id: int, role: str, range_id: int | None) -> tuple[str, datetime]:
+def create_access_token(
+    user_id: int, role: str, range_id: int | None, token_version: int
+) -> tuple[str, datetime]:
     expires_at = datetime.now(UTC) + timedelta(
         minutes=settings.access_token_expire_minutes
     )
@@ -46,6 +48,7 @@ def create_access_token(user_id: int, role: str, range_id: int | None) -> tuple[
         "sub": str(user_id),
         "role": role,
         "range_id": range_id,
+        "tv": token_version,
         "iat": datetime.now(UTC),
         "exp": expires_at,
     }

@@ -54,7 +54,7 @@ npm install && npm run dev                  # http://127.0.0.1:5173
 ## Tests and checks
 
 ```bash
-cd backend && pytest -q            # 88 tests, SQLite - no Docker or network needed
+cd backend && pytest -q            # 105 tests, SQLite - no Docker or network needed
 ./scripts/verify_api.sh            # 53 assertions against a running API, via curl
 cd backend && ruff check app tests
 cd frontend && npx oxlint src && npx tsc -b

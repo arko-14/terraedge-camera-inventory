@@ -134,6 +134,10 @@ class User(Base):
         ForeignKey("ranges.id", ondelete="RESTRICT"), nullable=True
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Incremented on logout. A token carries the version it was minted with, so
+    # bumping this invalidates every token issued before it - which is what
+    # makes logout mean something for a stateless token.
+    token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

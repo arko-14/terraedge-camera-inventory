@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from sqlalchemy import select
 
 from app.config import settings
-from app.deps import CurrentUser, DbSession
+from app.deps import CurrentUser, DbSession, get_optional_user
 from app.models import User
 from app.schemas import LoginRequest, LoginResponse, UserOut
 from app.security import (
@@ -53,7 +53,9 @@ def login(payload: LoginRequest, response: Response, db: DbSession) -> LoginResp
             detail="Incorrect email or password.",
         )
 
-    token, expires_at = create_access_token(user.id, user.role.value, user.range_id)
+    token, expires_at = create_access_token(
+        user.id, user.role.value, user.range_id, user.token_version
+    )
     csrf_token = generate_csrf_token()
     _set_session_cookies(response, token, csrf_token)
 
@@ -61,7 +63,22 @@ def login(payload: LoginRequest, response: Response, db: DbSession) -> LoginResp
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(response: Response) -> Response:
+def logout(request: Request, response: Response, db: DbSession) -> Response:
+    """Sign out, and invalidate every token already issued to this account.
+
+    Clearing the cookie ends a browser session, but a token that had been
+    copied out would otherwise stay valid until it expired. Bumping the
+    account's token version revokes those too.
+
+    The trade-off is that logout is account-wide, not per-device: signing out
+    on one device signs out everywhere. For this application that is the safer
+    default; per-device sessions would need a session table.
+    """
+    user = get_optional_user(request, db)
+    if user is not None:
+        user.token_version += 1
+        db.commit()
+
     for name in (settings.session_cookie_name, settings.csrf_cookie_name):
         response.delete_cookie(
             name,

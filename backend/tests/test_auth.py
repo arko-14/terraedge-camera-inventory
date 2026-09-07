@@ -125,3 +125,66 @@ def test_logout_clears_the_session(client, reserve):
     logout = client.post("/api/auth/logout", headers={"X-CSRF-Token": csrf_token})
     assert logout.status_code == 204
     assert client.get("/api/auth/me").status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Logout revokes tokens, not just cookies
+# ---------------------------------------------------------------------------
+def test_logout_invalidates_a_bearer_token(client, reserve):
+    """A stateless token would otherwise stay valid until it expired.
+
+    Logout bumps the account's token version, and every request compares the
+    version in the token against the user row it already loads.
+    """
+    login = client.post("/api/auth/login", json={"email": ADMIN_EMAIL, "password": PASSWORD})
+    token = login.json()["access_token"]
+    csrf = client.cookies.get(settings.csrf_cookie_name)
+
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+
+    assert client.post("/api/auth/logout", headers={"X-CSRF-Token": csrf}).status_code == 204
+
+    response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401, "the bearer token outlived logout"
+
+
+def test_logout_invalidates_the_cookie_session_too(client, reserve):
+    client.post("/api/auth/login", json={"email": ADMIN_EMAIL, "password": PASSWORD})
+    csrf = client.cookies.get(settings.csrf_cookie_name)
+
+    client.post("/api/auth/logout", headers={"X-CSRF-Token": csrf})
+
+    assert client.get("/api/auth/me").status_code == 401
+
+
+def test_a_token_issued_after_logout_still_works(client, reserve):
+    """Revocation must not lock the account out of signing back in."""
+    first = client.post("/api/auth/login", json={"email": ADMIN_EMAIL, "password": PASSWORD})
+    client.post("/api/auth/logout", headers={"X-CSRF-Token": client.cookies.get(settings.csrf_cookie_name)})
+
+    second = client.post("/api/auth/login", json={"email": ADMIN_EMAIL, "password": PASSWORD})
+    fresh = second.json()["access_token"]
+
+    assert fresh != first.json()["access_token"]
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {fresh}"}).status_code == 200
+
+
+def test_logout_does_not_sign_out_other_accounts(client, reserve):
+    """Revocation is scoped to the account, not global."""
+    admin_login = client.post("/api/auth/login", json={"email": ADMIN_EMAIL, "password": PASSWORD})
+    admin_token = admin_login.json()["access_token"]
+
+    client.cookies.clear()
+    range_login = client.post("/api/auth/login", json={"email": CHAHALA_EMAIL, "password": PASSWORD})
+    range_token = range_login.json()["access_token"]
+
+    client.post("/api/auth/logout", headers={"X-CSRF-Token": client.cookies.get(settings.csrf_cookie_name)})
+    client.cookies.clear()
+
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {range_token}"}).status_code == 401
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {admin_token}"}).status_code == 200
+
+
+def test_logout_without_a_session_still_succeeds(client, reserve):
+    """An expired or absent session must still clear cookies, not 401."""
+    assert client.post("/api/auth/logout").status_code == 204
