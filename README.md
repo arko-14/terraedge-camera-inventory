@@ -60,6 +60,12 @@ cd backend && ruff check app tests
 cd frontend && npx oxlint src && npx tsc -b
 ```
 
+A **Postman collection** is included in [`postman/`](postman/) if you would
+rather click than run a script — import the collection and environment, run the
+two login requests, and the rest works. Every request asserts its expected
+status. The main collection is read-only; anything that writes lives in a
+separate `-destructive` collection so it cannot be triggered by accident.
+
 `verify_api.sh` drives the **real API with curl, no browser** — which is how the
 brief asks for authorisation to be demonstrated. Add `CLEAN=1` to reseed
 afterwards, or point it at the deployment:
@@ -76,6 +82,7 @@ API=https://terraedge-3y8f.onrender.com ADMIN_PASSWORD=... RANGE_PASSWORD=... ./
 | `test_history.py` | Movement tracking, append-only history, no duplicate identities |
 | `test_persistence.py` | Survives restarts; constraints hold when the service layer is bypassed |
 | `test_csv.py` | Export scoping and filters, per-row import outcomes, round-trip |
+| `test_hardening.py` | Regressions for defects found in review: health status, headers, LIKE escaping, upload limits |
 
 ## Configuration
 
@@ -129,8 +136,10 @@ backend/app/
   routers/                    auth, cameras, ranges, dashboard
   config.py deps.py security.py schemas.py serializers.py
 backend/alembic/versions/     migrations
-backend/tests/                88 tests
+backend/tests/                105 tests
 frontend/src/                 pages, components, lib, auth
 scripts/verify_api.sh         53 direct-API assertions
+postman/                      importable collection + environment
+samples/                      example CSVs for the bulk import
 docs/schema.png               entity-relationship diagram
 ```

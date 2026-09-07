@@ -159,7 +159,7 @@ today.
 ## 8. The checks · 45 s
 
 ```bash
-cd backend && pytest -q          # 82 passed
+cd backend && pytest -q          # 105 passed
 ./scripts/verify_api.sh          # 53 checks passed, 0 failed
 ```
 

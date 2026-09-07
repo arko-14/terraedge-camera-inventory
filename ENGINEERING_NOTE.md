@@ -105,6 +105,13 @@ curl, no browser involved.
 - **Other** — One identical message for unknown email and wrong password. SPA
   fallback checks resolved paths stay inside the build directory.
 
+**Observability** — one structured line per request with a correlation id,
+method, path, status, duration, the authenticated user id and the forwarded
+client ip. The id is returned in an `X-Request-ID` header and included in error
+bodies, so a reported failure maps to a log line. Deliberately no emails,
+tokens or request bodies in the logs. Successful health checks are not logged,
+so a platform probe every few seconds cannot bury real traffic.
+
 ## Technology choices
 
 - **FastAPI + SQLAlchemy 2 + Alembic** — validation and OpenAPI docs for free;
@@ -122,17 +129,24 @@ curl, no browser involved.
   it split (Vercel + Render) first; moved once same-origin proved simpler *and*
   safer. The split path still works and is documented.
 
-## Optional extension: CSV import/export
+## Optional extensions
 
-The only extension I built, chosen because it addresses the actual starting
-point — the records are in spreadsheets now. Export reuses the same scoped query
-as the list endpoint, so it inherits range isolation rather than
+Both built only after the core workflow was complete and tested.
+
+**CSV import/export** — chosen first because it addresses the actual starting
+point: the records are in spreadsheets today. Export reuses the same scoped
+query as the list endpoint, so it inherits range isolation rather than
 re-implementing it. Import is row-by-row rather than transactional: a file with
 two bad rows imports the rest and reports those two against their spreadsheet
 row numbers, and existing serials are skipped rather than duplicated, so
 re-uploading a corrected file is safe. Each row goes through the same
 `register_camera` call as the API, so imported cameras get identical validation
 and a real history entry.
+
+**Deployment map** — deployed cameras on an OpenStreetMap layer, scoped per
+role, fitted to the markers. It reuses the camera list endpoint, so a range
+user's map shows their range and nothing else. Vector markers rather than pin
+icons, so there are no image assets to break under a bundler.
 
 ## Assumptions
 
@@ -156,16 +170,19 @@ and a real history entry.
 - Coordinates validated for range, not plausibility — nothing checks a point
   falls inside Similipal or the named beat.
 - Offset pagination; history isn't paginated at all.
-- No map or offline support — the brief's other optional extensions, skipped to
-  finish the core properly.
-- CSV import is capped at 1000 rows per file and has no dry-run preview.
+- No offline support — the remaining optional extension, and the one that
+  matters most operationally.
+- The map shows current positions only, not historical tracks.
+- CSV import is capped at 1000 rows and 2 MB per file, with no dry-run preview.
 - Tests run on SQLite while production is Postgres (mitigated above).
 
 ## What I'd change before real deployment
 
 1. Run the test-suite against Postgres in CI.
 2. Rate-limit authentication per IP and account, with lockout and backoff.
-3. Structured logging with a correlation id, plus error reporting.
+3. Ship logs to a searchable service and add error reporting. The structured
+   per-request logging and correlation ids are already in place; what is missing
+   is somewhere to search them and alerting when they go wrong.
 4. Admin screens for ranges, beats and accounts.
 5. **Offline capture** — beats have no connectivity: queued writes on the device,
    synced later, serial number as the idempotency key. The change that would most
