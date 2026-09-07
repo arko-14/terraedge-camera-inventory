@@ -17,7 +17,6 @@ deployed — replacing the spreadsheets and paper registers in use today.
 
 **[Engineering note](ENGINEERING_NOTE.md)** — architecture, data model, access
 rules, trade-offs, assumptions, limitations.
-**[Demo walkthrough](DEMO_SCRIPT.md)** — the journey to record or present.
 
 ---
 
@@ -59,12 +58,6 @@ cd backend && pytest -q            # 105 tests, SQLite - no Docker or network ne
 cd backend && ruff check app tests
 cd frontend && npx oxlint src && npx tsc -b
 ```
-
-A **Postman collection** is included in [`postman/`](postman/) if you would
-rather click than run a script — import the collection and environment, run the
-two login requests, and the rest works. Every request asserts its expected
-status. The main collection is read-only; anything that writes lives in a
-separate `-destructive` collection so it cannot be triggered by accident.
 
 `verify_api.sh` drives the **real API with curl, no browser** — which is how the
 brief asks for authorisation to be demonstrated. Add `CLEAN=1` to reseed
@@ -139,7 +132,6 @@ backend/alembic/versions/     migrations
 backend/tests/                105 tests
 frontend/src/                 pages, components, lib, auth
 scripts/verify_api.sh         53 direct-API assertions
-postman/                      importable collection + environment
 samples/                      example CSVs for the bulk import
 docs/schema.png               entity-relationship diagram
 ```
